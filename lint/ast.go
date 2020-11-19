@@ -108,14 +108,11 @@ func (l Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) {
 		l.lintTags(f, walker, tok)
 	}
 
-	// `scope: summary`
-	l.lintText(
-		f,
-		core.NewBlock(f.Content, f.Summary.String(), "summary."+f.RealExt),
-		0)
+	summary := core.NewBlock(f.Content, f.Summary.String(), "summary."+f.RealExt)
+	l.lintBlock(f, summary, len(f.Lines), 0)
 
-	// `scope: raw`
-	l.lintText(f, core.NewBlock("", f.Content, "raw."+f.RealExt), 0)
+	// Run all rules with `scope: raw`
+	l.lintBlock(f, core.NewBlock("", f.Content, "raw."+f.RealExt), len(f.Lines), 0)
 }
 
 func (l Linter) lintScope(f *core.File, state walker, txt string) {

@@ -351,8 +351,11 @@ func (f *File) AddAlert(a Alert, blk Block, lines, pad int) {
 		ctx = old
 	}
 
-	a.Line, a.Span = f.assignLoc(ctx, blk, pad, a)
-	//a.Line, a.Span = f.FindLoc(ctx, blk.Text, pad, lines, a)
+	if lines == 0 {
+		a.Line, a.Span = f.assignLoc(ctx, blk, pad, a)
+	} else {
+		a.Line, a.Span = f.FindLoc(ctx, blk.Text, pad, lines, a)
+	}
 
 	if a.Span[0] > 0 {
 		f.ChkToCtx[a.Check], _ = Substitute(ctx, a.Match, '#')

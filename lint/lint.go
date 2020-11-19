@@ -228,10 +228,18 @@ func (l *Linter) lintProse(f *core.File, parent core.Block, lnLength int) {
 
 func (l *Linter) lintLines(f *core.File) {
 	block := core.NewBlock("", f.Content, "text"+f.RealExt)
-	l.lintText(f, block, 0)
+	l.lintBlock(f, block, len(f.Lines), 0)
 }
 
 func (l *Linter) lintText(f *core.File, blk core.Block, pad int) {
+	l.lintBlock(f, blk, 0, pad)
+}
+
+func (l *Linter) lintTextLookup(f *core.File, blk core.Block, lines int, pad int) {
+	l.lintBlock(f, blk, lines, pad)
+}
+
+func (l *Linter) lintBlock(f *core.File, blk core.Block, lines int, pad int) {
 	var wg sync.WaitGroup
 
 	f.ChkToCtx = make(map[string]string)
@@ -259,7 +267,7 @@ func (l *Linter) lintText(f *core.File, blk core.Block, pad int) {
 	}()
 
 	for a := range results {
-		f.AddAlert(a, blk, 0, pad)
+		f.AddAlert(a, blk, lines, pad)
 	}
 }
 

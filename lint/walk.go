@@ -48,22 +48,9 @@ func (w *walker) append(txt string) {
 	if txt == "" {
 		return
 	}
-
-	pos := 0
-	for _, s := range strings.Split(txt, "\n") {
-		pos = strings.Index(w.context, s)
-		if pos < 0 {
-			for _, ss := range strings.Fields(s) {
-				pos = strings.Index(w.context, ss)
-			}
-		}
-	}
-
-	if pos >= 0 {
-		l := strings.Count(w.context[:pos], "\n")
-		if l > w.idx {
-			w.idx = l
-		}
+	pos := w.advance(txt)
+	if pos > -1 {
+		w.idx = pos
 	}
 	w.queue = append(w.queue, txt)
 }
@@ -74,7 +61,14 @@ func (w *walker) addTag(t string) {
 }
 
 func (w *walker) block(text, scope string) core.Block {
-	return core.NewLinedBlock(w.context, text, scope, w.idx)
+	line := w.idx
+
+	pos := w.advance(text)
+	if pos != line && pos > -1 {
+		line = pos
+	}
+
+	return core.NewLinedBlock(w.context, text, scope, line)
 }
 
 func (w *walker) walk() (html.TokenType, html.Token, string) {
@@ -91,4 +85,23 @@ func (w *walker) replaceToks(tok html.Token) {
 			}
 		}
 	}
+}
+
+func (w *walker) advance(t string) int {
+	pos := 0
+	for _, s := range strings.Split(t, "\n") {
+		pos = strings.Index(w.context, s)
+		if pos < 0 {
+			for _, ss := range strings.Fields(s) {
+				pos = strings.Index(w.context, ss)
+			}
+		}
+	}
+	if pos >= 0 {
+		l := strings.Count(w.context[:pos], "\n")
+		if l > w.idx {
+			return l
+		}
+	}
+	return -1
 }
