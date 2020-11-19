@@ -2,6 +2,7 @@ package lint
 
 import (
 	"bytes"
+	"strings"
 
 	"github.com/errata-ai/vale/v2/core"
 	"golang.org/x/net/html"
@@ -54,6 +55,12 @@ func (w *walker) addTag(t string) {
 
 func (w *walker) block(text, scope string) core.Block {
 	return core.NewBlock(w.context, text, scope)
+}
+
+func (w *walker) walk() (html.TokenType, html.Token, string) {
+	tokt := w.z.Next()
+	tok := w.z.Token()
+	return tokt, tok, html.UnescapeString(strings.TrimSpace(tok.Data))
 }
 
 func (w *walker) replaceToks(tok html.Token) {

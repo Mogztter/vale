@@ -37,9 +37,7 @@ var tagToScope = map[string]string{
 }
 
 func (l Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) {
-	var txt, attr string
-	var tokt html.TokenType
-	var tok html.Token
+	var attr string
 	var inBlock, inline, skip, skipClass bool
 
 	buf := bytes.NewBufferString("")
@@ -59,10 +57,7 @@ func (l Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) {
 
 	walker := newWalker(f, raw, offset)
 	for {
-		tokt = walker.z.Next()
-		tok = walker.z.Token()
-		txt = html.UnescapeString(strings.TrimSpace(tok.Data))
-
+		tokt, tok, txt := walker.walk()
 		skipClass = checkClasses(attr, skipClasses)
 		if tokt == html.ErrorToken {
 			break
