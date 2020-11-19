@@ -36,13 +36,12 @@ var tagToScope = map[string]string{
 	"code":   "code",
 }
 
-func (l Linter) lintHTMLTokens(f *core.File, ctx string, fsrc []byte, offset int) {
-	var txt, attr, tag string
+func (l Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) {
+	var txt, attr string
 	var tokt html.TokenType
 	var tok html.Token
 	var inBlock, inline, skip, skipClass bool
 
-	lines := len(f.Lines) + offset
 	buf := bytes.NewBufferString("")
 
 	// The user has specified a custom list of tags/classes to ignore.
@@ -53,27 +52,15 @@ func (l Linter) lintHTMLTokens(f *core.File, ctx string, fsrc []byte, offset int
 		skipClasses = append(skipClasses, l.Manager.Config.IgnoredClasses...)
 	}
 
-	// queue holds each segment of text we encounter in a block, which we then
-	// use to sequentially update our context.
-	queue := []string{}
-
-	// tagHistory holds the HTML tags we encounter in a given block -- e.g.,
-	// if we see <ul>, <li>, <p>, we'd get tagHistory = [ul li p]. It's reset
-	// on every non-inline end tag.
-	tagHistory := []string{}
-
-	tokens := html.NewTokenizer(bytes.NewReader(fsrc))
-
 	skipped := []string{"tt", "code"}
-
-	walker := NewWalker(ctx, offset)
 	if len(l.Manager.Config.IgnoredScopes) > 0 {
 		skipped = l.Manager.Config.IgnoredScopes
 	}
 
+	walker := newWalker(f, raw, offset)
 	for {
-		tokt = tokens.Next()
-		tok = tokens.Token()
+		tokt = walker.z.Next()
+		tok = walker.z.Token()
 		txt = html.UnescapeString(strings.TrimSpace(tok.Data))
 
 		skipClass = checkClasses(attr, skipClasses)
@@ -86,23 +73,25 @@ func (l Linter) lintHTMLTokens(f *core.File, ctx string, fsrc []byte, offset int
 		} else if tokt == html.StartTagToken {
 			inline = core.StringInSlice(txt, inlineTags)
 			skip = core.StringInSlice(txt, skipped)
-			tagHistory = append(tagHistory, txt)
-			tag = txt
+			walker.addTag(txt)
 		} else if tokt == html.EndTagToken && core.StringInSlice(txt, inlineTags) {
-			tag = ""
+			walker.activeTag = ""
 		} else if tokt == html.CommentToken {
 			f.UpdateComments(txt)
 		} else if tokt == html.TextToken {
-			skip = skip || shouldBeSkipped(tagHistory, f.NormedExt)
-			if scope, match := tagToScope[tag]; match && core.StringInSlice(tag, inlineTags) {
-				// NOTE: We need to create a "temporary" context because this
-				// text is actually linted twice: once as a 'link' and once as
-				// part of the overall paragraph. See issue #105 for more info.
-				tempCtx := updateContext(ctx, queue)
-				l.lintText(f, core.NewBlock(tempCtx, txt, scope), lines, 0)
-				tag = ""
+			skip = skip || shouldBeSkipped(walker.tagHistory, f.NormedExt)
+			if scope, match := tagToScope[walker.activeTag]; match {
+				if core.StringInSlice(walker.activeTag, inlineTags) {
+					// NOTE: We need to create a "temporary" context because
+					// this text is actually linted twice: once as a 'link' and
+					// once as part of the overall paragraph. See issue #105
+					// for more info.
+					tempCtx := updateContext(walker.context, walker.queue)
+					l.lintText(f, core.NewBlock(tempCtx, txt, scope), walker.lines, 0)
+					walker.activeTag = ""
+				}
 			}
-			queue = append(queue, txt)
+			walker.append(txt)
 			if !inBlock && txt != "" {
 				txt, skip = clean(txt, f.NormedExt, skip, skipClass, inline)
 				buf.WriteString(txt)
@@ -112,38 +101,31 @@ func (l Linter) lintHTMLTokens(f *core.File, ctx string, fsrc []byte, offset int
 		if tokt == html.EndTagToken && !core.StringInSlice(txt, inlineTags) {
 			content := buf.String()
 			if strings.TrimSpace(content) != "" {
-				l.lintScope(f, ctx, content, tagHistory, lines)
+				l.lintScope(f, walker, content)
 			}
-
-			ctx = updateContext(ctx, queue)
-			queue = []string{}
-			tagHistory = []string{}
-
+			walker.reset()
 			buf.Reset()
 		}
 
 		attr = getAttribute(tok, "class")
-		ctx = clearElements(ctx, tok)
 
-		if tok.Data == "img" {
-			for _, a := range tok.Attr {
-				if a.Key == "alt" {
-					block := core.NewBlock(ctx, a.Val, "text.attr."+a.Key)
-					l.lintText(f, block, lines, 0)
-				}
-			}
-		}
+		walker.replaceToks(tok)
+		l.lintTags(f, walker, tok)
 	}
 
-	summary := core.NewBlock(f.Content, f.Summary.String(), "summary."+f.RealExt)
-	l.lintText(f, summary, lines, 0)
+	// `scope: summary`
+	l.lintText(
+		f,
+		core.NewBlock(f.Content, f.Summary.String(), "summary."+f.RealExt),
+		walker.lines,
+		0)
 
-	// Run all rules with `scope: raw`
-	l.lintText(f, core.NewBlock("", f.Content, "raw."+f.RealExt), lines, 0)
+	// `scope: raw`
+	l.lintText(f, core.NewBlock("", f.Content, "raw."+f.RealExt), walker.lines, 0)
 }
 
-func (l Linter) lintScope(f *core.File, ctx, txt string, tags []string, lines int) {
-	for _, tag := range tags {
+func (l Linter) lintScope(f *core.File, state walker, txt string) {
+	for _, tag := range state.tagHistory {
 		scope, match := tagToScope[tag]
 		if (match && !core.StringInSlice(tag, inlineTags)) || heading.MatchString(tag) {
 			if match {
@@ -152,7 +134,7 @@ func (l Linter) lintScope(f *core.File, ctx, txt string, tags []string, lines in
 				scope = "text.heading." + tag + f.RealExt
 			}
 			txt = strings.TrimLeft(txt, " ")
-			l.lintText(f, core.NewBlock(ctx, txt, scope), lines, 0)
+			l.lintText(f, core.NewBlock(state.context, txt, scope), state.lines, 0)
 			return
 		}
 	}
@@ -160,7 +142,21 @@ func (l Linter) lintScope(f *core.File, ctx, txt string, tags []string, lines in
 	// NOTE: We don't include headings, list items, or table cells (which are
 	// processed above) in our Summary content.
 	f.Summary.WriteString(txt + " ")
-	l.lintProse(f, ctx, txt, lines, 0)
+	l.lintProse(f, state.context, txt, state.lines, 0)
+}
+
+func (l Linter) lintTags(f *core.File, state walker, tok html.Token) {
+	if tok.Data == "img" {
+		for _, a := range tok.Attr {
+			if a.Key == "alt" {
+				l.lintText(
+					f,
+					state.block(a.Val, "text.attr."+a.Key),
+					state.lines,
+					0)
+			}
+		}
+	}
 }
 
 func checkClasses(attr string, ignore []string) bool {
@@ -219,4 +215,37 @@ func getAttribute(tok html.Token, key string) string {
 		}
 	}
 	return ""
+}
+
+func updateContext(ctx string, queue []string) string {
+	for _, s := range queue {
+		ctx = updateCtx(ctx, s, html.TextToken)
+	}
+	return ctx
+}
+
+func clearElements(ctx string, tok html.Token) string {
+	if tok.Data == "img" || tok.Data == "a" || tok.Data == "p" || tok.Data == "script" {
+		for _, a := range tok.Attr {
+			if a.Key == "href" || a.Key == "id" || a.Key == "src" {
+				ctx = updateCtx(ctx, a.Val, html.TextToken)
+			}
+		}
+	}
+	return ctx
+}
+
+func updateCtx(ctx, txt string, tokt html.TokenType) string {
+	var found bool
+	if (tokt == html.TextToken || tokt == html.CommentToken) && txt != "" {
+		for _, s := range strings.Split(txt, "\n") {
+			ctx, found = core.Substitute(ctx, s, '@')
+			if !found {
+				for _, w := range strings.Fields(s) {
+					ctx, _ = core.Substitute(ctx, w, '@')
+				}
+			}
+		}
+	}
+	return ctx
 }

@@ -1,58 +1,67 @@
 package lint
 
 import (
-	"strings"
+	"bytes"
 
 	"github.com/errata-ai/vale/v2/core"
 	"golang.org/x/net/html"
 )
 
-// Walker ...
-type Walker struct {
-	Line    int
-	Section string
-	Context string
+// walker ...
+type walker struct {
+	lines   int
+	section string
+	context string
+
+	idx int
+	z   *html.Tokenizer
+
+	// queue holds each segment of text we encounter in a block, which we then
+	// use to sequentially update our context.
+	queue []string
+
+	// tagHistory holds the HTML tags we encounter in a given block -- e.g.,
+	// if we see <ul>, <li>, <p>, we'd get tagHistory = [ul li p]. It's reset
+	// on every non-inline end tag.
+	tagHistory []string
+
+	activeTag string
 }
 
-// NewWalker ...
-func NewWalker(context string, offset int) Walker {
-	return Walker{Line: offset, Context: context}
+func newWalker(f *core.File, raw []byte, offset int) walker {
+	return walker{
+		lines:   len(f.Lines) + offset,
+		context: f.Content,
+		z:       html.NewTokenizer(bytes.NewReader(raw))}
 }
 
-// Update ...
-func (w Walker) Update(queue []string) {
-
-}
-
-func updateContext(ctx string, queue []string) string {
-	for _, s := range queue {
-		ctx = updateCtx(ctx, s, html.TextToken)
+func (w *walker) reset() {
+	for _, s := range w.queue {
+		w.context = updateCtx(w.context, s, html.TextToken)
 	}
-	return ctx
+	w.queue = []string{}
+	w.tagHistory = []string{}
 }
 
-func clearElements(ctx string, tok html.Token) string {
-	if tok.Data == "img" || tok.Data == "a" || tok.Data == "p" || tok.Data == "script" {
+func (w *walker) append(s string) {
+	w.queue = append(w.queue, s)
+}
+
+func (w *walker) addTag(t string) {
+	w.tagHistory = append(w.tagHistory, t)
+	w.activeTag = t
+}
+
+func (w *walker) block(text, scope string) core.Block {
+	return core.NewBlock(w.context, text, scope)
+}
+
+func (w *walker) replaceToks(tok html.Token) {
+	if core.StringInSlice(tok.Data, []string{"img", "a", "p", "script"}) {
 		for _, a := range tok.Attr {
 			if a.Key == "href" || a.Key == "id" || a.Key == "src" {
-				ctx = updateCtx(ctx, a.Val, html.TextToken)
+				w.context = updateCtx(w.context, a.Val, html.TextToken)
 			}
 		}
 	}
-	return ctx
-}
-
-func updateCtx(ctx, txt string, tokt html.TokenType) string {
-	var found bool
-	if (tokt == html.TextToken || tokt == html.CommentToken) && txt != "" {
-		for _, s := range strings.Split(txt, "\n") {
-			ctx, found = core.Substitute(ctx, s, '@')
-			if !found {
-				for _, w := range strings.Fields(s) {
-					ctx, _ = core.Substitute(ctx, w, '@')
-				}
-			}
-		}
-	}
-	return ctx
 }
