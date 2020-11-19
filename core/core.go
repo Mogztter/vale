@@ -315,17 +315,8 @@ func FormatAlert(a *Alert, limit int, level, name string) {
 }
 
 func (f *File) assignLoc(ctx string, blk Block, pad int, a Alert) (int, []int) {
-	var lines []string
-
 	loc := a.Span
-
-	if f.Format == "markup" && !f.Simple {
-		lines = f.Lines
-	} else {
-		lines = strings.SplitAfter(ctx, "\n")
-	}
-
-	for idx, l := range lines {
+	for idx, l := range strings.SplitAfter(ctx, "\n") {
 		if idx == blk.Line {
 			length := utf8.RuneCountInString(l)
 			pos, substring := initialPosition(l, blk.Text, a)
@@ -341,7 +332,6 @@ func (f *File) assignLoc(ctx string, blk Block, pad int, a Alert) (int, []int) {
 			return blk.Line + 1, loc
 		}
 	}
-
 	return blk.Line + 1, a.Span
 }
 
