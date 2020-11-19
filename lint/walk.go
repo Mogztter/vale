@@ -44,8 +44,28 @@ func (w *walker) reset() {
 	w.tagHistory = []string{}
 }
 
-func (w *walker) append(s string) {
-	w.queue = append(w.queue, s)
+func (w *walker) append(txt string) {
+	if txt == "" {
+		return
+	}
+
+	pos := 0
+	for _, s := range strings.Split(txt, "\n") {
+		pos = strings.Index(w.context, s)
+		if pos < 0 {
+			for _, ss := range strings.Fields(s) {
+				pos = strings.Index(w.context, ss)
+			}
+		}
+	}
+
+	if pos >= 0 {
+		l := strings.Count(w.context[:pos], "\n")
+		if l > w.idx {
+			w.idx = l
+		}
+	}
+	w.queue = append(w.queue, txt)
 }
 
 func (w *walker) addTag(t string) {
@@ -54,7 +74,7 @@ func (w *walker) addTag(t string) {
 }
 
 func (w *walker) block(text, scope string) core.Block {
-	return core.NewBlock(w.context, text, scope)
+	return core.NewLinedBlock(w.context, text, scope, w.idx)
 }
 
 func (w *walker) walk() (html.TokenType, html.Token, string) {

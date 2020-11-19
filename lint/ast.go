@@ -82,7 +82,7 @@ func (l Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) {
 					// once as part of the overall paragraph. See issue #105
 					// for more info.
 					tempCtx := updateContext(walker.context, walker.queue)
-					l.lintText(f, core.NewBlock(tempCtx, txt, scope), walker.lines, 0)
+					l.lintText(f, core.NewBlock(tempCtx, txt, scope), 0)
 					walker.activeTag = ""
 				}
 			}
@@ -112,11 +112,10 @@ func (l Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) {
 	l.lintText(
 		f,
 		core.NewBlock(f.Content, f.Summary.String(), "summary."+f.RealExt),
-		walker.lines,
 		0)
 
 	// `scope: raw`
-	l.lintText(f, core.NewBlock("", f.Content, "raw."+f.RealExt), walker.lines, 0)
+	l.lintText(f, core.NewBlock("", f.Content, "raw."+f.RealExt), 0)
 }
 
 func (l Linter) lintScope(f *core.File, state walker, txt string) {
@@ -129,7 +128,8 @@ func (l Linter) lintScope(f *core.File, state walker, txt string) {
 				scope = "text.heading." + tag + f.RealExt
 			}
 			txt = strings.TrimLeft(txt, " ")
-			l.lintText(f, core.NewBlock(state.context, txt, scope), state.lines, 0)
+			b := state.block(txt, scope)
+			l.lintText(f, b, 0)
 			return
 		}
 	}
@@ -137,7 +137,9 @@ func (l Linter) lintScope(f *core.File, state walker, txt string) {
 	// NOTE: We don't include headings, list items, or table cells (which are
 	// processed above) in our Summary content.
 	f.Summary.WriteString(txt + " ")
-	l.lintProse(f, state.context, txt, state.lines, 0)
+
+	b := state.block(txt, "txt")
+	l.lintProse(f, b, 0)
 }
 
 func (l Linter) lintTags(f *core.File, state walker, tok html.Token) {
@@ -146,9 +148,7 @@ func (l Linter) lintTags(f *core.File, state walker, tok html.Token) {
 			if a.Key == "alt" {
 				l.lintText(
 					f,
-					state.block(a.Val, "text.attr."+a.Key),
-					state.lines,
-					0)
+					state.block(a.Val, "text.attr."+a.Key), 0)
 			}
 		}
 	}

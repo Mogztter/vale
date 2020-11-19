@@ -55,9 +55,9 @@ func NewGlob(pat string) (Glob, error) {
 // A Block represents a section of text.
 type Block struct {
 	Context string   // parent content - e.g., sentence -> paragraph
-	Text    string   // text content
-	Raw     string   // text content without any processing
+	Line    int      // Line of the block
 	Scope   Selector // section selector
+	Text    string   // text content
 }
 
 // NewBlock makes a new Block with prepared text and a Selector.
@@ -66,7 +66,22 @@ func NewBlock(ctx, txt, sel string) Block {
 		ctx = txt
 	}
 	return Block{
-		Context: ctx, Text: txt, Scope: Selector{Value: sel}}
+		Context: ctx,
+		Text:    txt,
+		Scope:   Selector{Value: sel},
+		Line:    -1}
+}
+
+// NewLinedBlock ...
+func NewLinedBlock(ctx, txt, sel string, line int) Block {
+	if ctx == "" {
+		ctx = txt
+	}
+	return Block{
+		Context: ctx,
+		Text:    txt,
+		Scope:   Selector{Value: sel},
+		Line:    line}
 }
 
 // A File represents a linted text file.
@@ -299,6 +314,36 @@ func FormatAlert(a *Alert, limit int, level, name string) {
 	a.Message = WhitespaceToSpace(a.Message)
 }
 
+func (f *File) assignLoc(ctx string, blk Block, pad int, a Alert) (int, []int) {
+	var lines []string
+
+	loc := a.Span
+	if f.Format == "markup" && !f.Simple {
+		lines = f.Lines
+	} else {
+		lines = strings.SplitAfter(ctx, "\n")
+	}
+
+	for idx, l := range lines {
+		if idx == blk.Line {
+			length := utf8.RuneCountInString(l)
+			pos, substring := initialPosition(l, blk.Text, a)
+
+			loc[0] = pos + pad
+			loc[1] = pos + utf8.RuneCountInString(substring) - 1
+
+			extent := length + pad
+			if loc[1] > extent {
+				loc[1] = extent
+			}
+
+			return blk.Line + 1, loc
+		}
+	}
+
+	return blk.Line + 1, a.Span
+}
+
 // AddAlert calculates the in-text location of an Alert and adds it to a File.
 func (f *File) AddAlert(a Alert, blk Block, lines, pad int) {
 	ctx := blk.Context
@@ -306,7 +351,9 @@ func (f *File) AddAlert(a Alert, blk Block, lines, pad int) {
 		ctx = old
 	}
 
-	a.Line, a.Span = f.FindLoc(ctx, blk.Text, pad, lines, a)
+	a.Line, a.Span = f.assignLoc(ctx, blk, pad, a)
+	//a.Line, a.Span = f.FindLoc(ctx, blk.Text, pad, lines, a)
+
 	if a.Span[0] > 0 {
 		f.ChkToCtx[a.Check], _ = Substitute(ctx, a.Match, '#')
 		if !a.Hide {
