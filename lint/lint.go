@@ -199,37 +199,36 @@ func (l *Linter) lintFile(src string) lintResult {
 func (l *Linter) lintProse(f *core.File, parent core.Block, lines int) {
 	var b core.Block
 
+	// FIXME: This is required for paragraphs that lack a newline delimiter:
+	//
+	// p1
+	// p2
+	//
+	// See fixtures/i18n for an example.
 	needsLookup := strings.Count(parent.Text, "\n") > 0
 
 	text := core.Sanitize(parent.Text)
 	if l.Manager.HasScope("paragraph") || l.Manager.HasScope("sentence") {
-		senScope := "sentence" + f.RealExt
-		hasCtx := parent.Context != ""
 		for _, p := range strings.SplitAfter(text, "\n\n") {
 			for _, s := range core.SentenceTokenizer.Tokenize(p) {
-				sent := strings.TrimSpace(s)
-				if hasCtx {
-					b = core.NewLinedBlock(parent.Context, sent, senScope, parent.Line)
-				} else {
-					b = core.NewLinedBlock(p, sent, senScope, parent.Line)
-				}
+				b = core.NewLinedBlock(
+					parent.Context,
+					strings.TrimSpace(s),
+					"sentence"+f.RealExt,
+					parent.Line)
 				l.lintBlock(f, b, lines, 0, needsLookup)
 			}
-			l.lintBlock(
-				f,
-				core.NewLinedBlock(parent.Context, p, "paragraph"+f.RealExt, parent.Line),
-				lines,
-				0,
-				needsLookup)
+			b = core.NewLinedBlock(
+				parent.Context,
+				p,
+				"paragraph"+f.RealExt,
+				parent.Line)
+			l.lintBlock(f, b, lines, 0, needsLookup)
 		}
 	}
 
-	l.lintBlock(
-		f,
-		core.NewLinedBlock(parent.Context, text, "text"+f.RealExt, parent.Line),
-		lines,
-		0,
-		needsLookup)
+	b = core.NewLinedBlock(parent.Context, text, "text"+f.RealExt, parent.Line)
+	l.lintBlock(f, b, lines, 0, needsLookup)
 }
 
 func (l *Linter) lintLines(f *core.File) {
