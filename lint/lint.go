@@ -199,6 +199,8 @@ func (l *Linter) lintFile(src string) lintResult {
 func (l *Linter) lintProse(f *core.File, parent core.Block, lines int) {
 	var b core.Block
 
+	needsLookup := strings.Count(parent.Text, "\n") > 0
+
 	text := core.Sanitize(parent.Text)
 	if l.Manager.HasScope("paragraph") || l.Manager.HasScope("sentence") {
 		senScope := "sentence" + f.RealExt
@@ -211,14 +213,14 @@ func (l *Linter) lintProse(f *core.File, parent core.Block, lines int) {
 				} else {
 					b = core.NewLinedBlock(p, sent, senScope, parent.Line)
 				}
-				l.lintBlock(f, b, lines, 0, false)
+				l.lintBlock(f, b, lines, 0, needsLookup)
 			}
 			l.lintBlock(
 				f,
 				core.NewLinedBlock(parent.Context, p, "paragraph"+f.RealExt, parent.Line),
 				lines,
 				0,
-				false)
+				needsLookup)
 		}
 	}
 
@@ -227,7 +229,7 @@ func (l *Linter) lintProse(f *core.File, parent core.Block, lines int) {
 		core.NewLinedBlock(parent.Context, text, "text"+f.RealExt, parent.Line),
 		lines,
 		0,
-		false)
+		needsLookup)
 }
 
 func (l *Linter) lintLines(f *core.File) {

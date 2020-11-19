@@ -96,7 +96,6 @@ func (l Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) {
 		if tokt == html.EndTagToken && !core.StringInSlice(txt, inlineTags) {
 			content := buf.String()
 			if strings.TrimSpace(content) != "" {
-				//fmt.Println("WOO", content, walker.idx)
 				l.lintScope(f, walker, content)
 			}
 			walker.reset()
