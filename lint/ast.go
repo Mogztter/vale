@@ -65,6 +65,8 @@ func (l Linter) lintHTMLTokens(f *core.File, ctx string, fsrc []byte, offset int
 	tokens := html.NewTokenizer(bytes.NewReader(fsrc))
 
 	skipped := []string{"tt", "code"}
+
+	walker := NewWalker(ctx, offset)
 	if len(l.Manager.Config.IgnoredScopes) > 0 {
 		skipped = l.Manager.Config.IgnoredScopes
 	}
@@ -195,13 +197,6 @@ func codify(ext, text string) string {
 	return text
 }
 
-func updateContext(ctx string, queue []string) string {
-	for _, s := range queue {
-		ctx = updateCtx(ctx, s, html.TextToken)
-	}
-	return ctx
-}
-
 func clean(txt, ext string, skip, skipClass, inline bool) (string, bool) {
 	punct := []string{".", "?", "!", ",", ":", ";"}
 	first, _ := utf8.DecodeRuneInString(txt)
@@ -224,30 +219,4 @@ func getAttribute(tok html.Token, key string) string {
 		}
 	}
 	return ""
-}
-
-func updateCtx(ctx string, txt string, tokt html.TokenType) string {
-	var found bool
-	if (tokt == html.TextToken || tokt == html.CommentToken) && txt != "" {
-		for _, s := range strings.Split(txt, "\n") {
-			ctx, found = core.Substitute(ctx, s, '@')
-			if !found {
-				for _, w := range strings.Fields(s) {
-					ctx, _ = core.Substitute(ctx, w, '@')
-				}
-			}
-		}
-	}
-	return ctx
-}
-
-func clearElements(ctx string, tok html.Token) string {
-	if tok.Data == "img" || tok.Data == "a" || tok.Data == "p" || tok.Data == "script" {
-		for _, a := range tok.Attr {
-			if a.Key == "href" || a.Key == "id" || a.Key == "src" {
-				ctx = updateCtx(ctx, a.Val, html.TextToken)
-			}
-		}
-	}
-	return ctx
 }
