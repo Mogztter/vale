@@ -196,7 +196,7 @@ func (l *Linter) lintFile(src string) lintResult {
 	return lintResult{file, err}
 }
 
-func (l *Linter) lintProse(f *core.File, parent core.Block, lnLength int) {
+func (l *Linter) lintProse(f *core.File, parent core.Block, lines int) {
 	var b core.Block
 
 	text := core.Sanitize(parent.Text)
@@ -211,35 +211,31 @@ func (l *Linter) lintProse(f *core.File, parent core.Block, lnLength int) {
 				} else {
 					b = core.NewLinedBlock(p, sent, senScope, parent.Line)
 				}
-				l.lintText(f, b, 0)
+				l.lintBlock(f, b, lines, 0, false)
 			}
-			l.lintText(
+			l.lintBlock(
 				f,
 				core.NewLinedBlock(parent.Context, p, "paragraph"+f.RealExt, parent.Line),
-				0)
+				lines,
+				0,
+				false)
 		}
 	}
 
-	l.lintText(
+	l.lintBlock(
 		f,
 		core.NewLinedBlock(parent.Context, text, "text"+f.RealExt, parent.Line),
-		0)
+		lines,
+		0,
+		false)
 }
 
 func (l *Linter) lintLines(f *core.File) {
 	block := core.NewBlock("", f.Content, "text"+f.RealExt)
-	l.lintBlock(f, block, len(f.Lines), 0)
+	l.lintBlock(f, block, len(f.Lines), 0, true)
 }
 
-func (l *Linter) lintText(f *core.File, blk core.Block, pad int) {
-	l.lintBlock(f, blk, 0, pad)
-}
-
-func (l *Linter) lintTextLookup(f *core.File, blk core.Block, lines int, pad int) {
-	l.lintBlock(f, blk, lines, pad)
-}
-
-func (l *Linter) lintBlock(f *core.File, blk core.Block, lines int, pad int) {
+func (l *Linter) lintBlock(f *core.File, blk core.Block, lines, pad int, lookup bool) {
 	var wg sync.WaitGroup
 
 	f.ChkToCtx = make(map[string]string)
@@ -267,7 +263,7 @@ func (l *Linter) lintBlock(f *core.File, blk core.Block, lines int, pad int) {
 	}()
 
 	for a := range results {
-		f.AddAlert(a, blk, lines, pad)
+		f.AddAlert(a, blk, lines, pad, lookup)
 	}
 }
 

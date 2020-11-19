@@ -82,7 +82,7 @@ func (l Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) {
 					// once as part of the overall paragraph. See issue #105
 					// for more info.
 					tempCtx := updateContext(walker.context, walker.queue)
-					l.lintText(f, core.NewBlock(tempCtx, txt, scope), 0)
+					l.lintBlock(f, core.NewBlock(tempCtx, txt, scope), walker.lines, 0, true)
 					walker.activeTag = ""
 				}
 			}
@@ -96,6 +96,7 @@ func (l Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) {
 		if tokt == html.EndTagToken && !core.StringInSlice(txt, inlineTags) {
 			content := buf.String()
 			if strings.TrimSpace(content) != "" {
+				//fmt.Println("WOO", content, walker.idx)
 				l.lintScope(f, walker, content)
 			}
 			walker.reset()
@@ -109,10 +110,10 @@ func (l Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) {
 	}
 
 	summary := core.NewBlock(f.Content, f.Summary.String(), "summary."+f.RealExt)
-	l.lintBlock(f, summary, len(f.Lines), 0)
+	l.lintBlock(f, summary, len(f.Lines), 0, true)
 
 	// Run all rules with `scope: raw`
-	l.lintBlock(f, core.NewBlock("", f.Content, "raw."+f.RealExt), len(f.Lines), 0)
+	l.lintBlock(f, core.NewBlock("", f.Content, "raw."+f.RealExt), len(f.Lines), 0, true)
 }
 
 func (l Linter) lintScope(f *core.File, state walker, txt string) {
@@ -126,7 +127,7 @@ func (l Linter) lintScope(f *core.File, state walker, txt string) {
 			}
 			txt = strings.TrimLeft(txt, " ")
 			b := state.block(txt, scope)
-			l.lintText(f, b, 0)
+			l.lintBlock(f, b, state.lines, 0, false)
 			return
 		}
 	}
@@ -136,16 +137,16 @@ func (l Linter) lintScope(f *core.File, state walker, txt string) {
 	f.Summary.WriteString(txt + " ")
 
 	b := state.block(txt, "txt")
-	l.lintProse(f, b, 0)
+	l.lintProse(f, b, state.lines)
 }
 
 func (l Linter) lintTags(f *core.File, state walker, tok html.Token) {
 	if tok.Data == "img" {
 		for _, a := range tok.Attr {
 			if a.Key == "alt" {
-				l.lintText(
+				l.lintBlock(
 					f,
-					state.block(a.Val, "text.attr."+a.Key), 0)
+					state.block(a.Val, "text.attr."+a.Key), state.lines, 0, false)
 			}
 		}
 	}

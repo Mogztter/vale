@@ -318,6 +318,7 @@ func (f *File) assignLoc(ctx string, blk Block, pad int, a Alert) (int, []int) {
 	var lines []string
 
 	loc := a.Span
+
 	if f.Format == "markup" && !f.Simple {
 		lines = f.Lines
 	} else {
@@ -345,15 +346,16 @@ func (f *File) assignLoc(ctx string, blk Block, pad int, a Alert) (int, []int) {
 }
 
 // AddAlert calculates the in-text location of an Alert and adds it to a File.
-func (f *File) AddAlert(a Alert, blk Block, lines, pad int) {
+func (f *File) AddAlert(a Alert, blk Block, lines, pad int, lookup bool) {
 	ctx := blk.Context
 	if old, ok := f.ChkToCtx[a.Check]; ok {
 		ctx = old
 	}
 
-	if lines == 0 {
+	if !lookup {
 		a.Line, a.Span = f.assignLoc(ctx, blk, pad, a)
-	} else {
+	}
+	if (!lookup && a.Span[0] < 0) || lookup {
 		a.Line, a.Span = f.FindLoc(ctx, blk.Text, pad, lines, a)
 	}
 
