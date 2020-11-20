@@ -8,11 +8,11 @@ import (
 	"golang.org/x/net/html"
 )
 
-// walker ...
 type walker struct {
-	lines   int
-	section string
-	context string
+	lines     int
+	section   string
+	context   string
+	activeTag string
 
 	idx int
 	z   *html.Tokenizer
@@ -25,8 +25,6 @@ type walker struct {
 	// if we see <ul>, <li>, <p>, we'd get tagHistory = [ul li p]. It's reset
 	// on every non-inline end tag.
 	tagHistory []string
-
-	activeTag string
 }
 
 func newWalker(f *core.File, raw []byte, offset int) walker {
@@ -44,20 +42,19 @@ func (w *walker) reset() {
 	w.tagHistory = []string{}
 }
 
-func (w *walker) append(txt string) {
-	if txt == "" {
-		return
+func (w *walker) append(text string) {
+	if text != "" {
+		pos := w.advance(text)
+		if pos > -1 {
+			w.idx = pos
+		}
+		w.queue = append(w.queue, text)
 	}
-	pos := w.advance(txt)
-	if pos > -1 {
-		w.idx = pos
-	}
-	w.queue = append(w.queue, txt)
 }
 
-func (w *walker) addTag(t string) {
-	w.tagHistory = append(w.tagHistory, t)
-	w.activeTag = t
+func (w *walker) addTag(tag string) {
+	w.tagHistory = append(w.tagHistory, tag)
+	w.activeTag = tag
 }
 
 func (w *walker) block(text, scope string) core.Block {
@@ -87,9 +84,9 @@ func (w *walker) replaceToks(tok html.Token) {
 	}
 }
 
-func (w *walker) advance(t string) int {
+func (w *walker) advance(text string) int {
 	pos := 0
-	for _, s := range strings.Split(t, "\n") {
+	for _, s := range strings.Split(text, "\n") {
 		pos = strings.Index(w.context, s)
 		if pos < 0 {
 			for _, ss := range strings.Fields(s) {

@@ -82,7 +82,12 @@ func (l Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) {
 					// once as part of the overall paragraph. See issue #105
 					// for more info.
 					tempCtx := updateContext(walker.context, walker.queue)
-					l.lintBlock(f, core.NewBlock(tempCtx, txt, scope), walker.lines, 0, true)
+					l.lintBlock(
+						f,
+						core.NewBlock(tempCtx, txt, scope),
+						walker.lines,
+						0,
+						true)
 					walker.activeTag = ""
 				}
 			}
@@ -107,12 +112,7 @@ func (l Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) {
 		walker.replaceToks(tok)
 		l.lintTags(f, walker, tok)
 	}
-
-	summary := core.NewBlock(f.Content, f.Summary.String(), "summary."+f.RealExt)
-	l.lintBlock(f, summary, len(f.Lines), 0, true)
-
-	// Run all rules with `scope: raw`
-	l.lintBlock(f, core.NewBlock("", f.Content, "raw."+f.RealExt), len(f.Lines), 0, true)
+	l.lintSizedScopes(f)
 }
 
 func (l Linter) lintScope(f *core.File, state walker, txt string) {
@@ -137,6 +137,24 @@ func (l Linter) lintScope(f *core.File, state walker, txt string) {
 
 	b := state.block(txt, "txt")
 	l.lintProse(f, b, state.lines)
+}
+
+func (l Linter) lintSizedScopes(f *core.File) {
+	// Run all rules with `scope: summary`
+	l.lintBlock(
+		f,
+		core.NewBlock(f.Content, f.Summary.String(), "summary."+f.RealExt),
+		len(f.Lines),
+		0,
+		true)
+
+	// Run all rules with `scope: raw`
+	l.lintBlock(
+		f,
+		core.NewBlock("", f.Content, "raw."+f.RealExt),
+		len(f.Lines),
+		0,
+		true)
 }
 
 func (l Linter) lintTags(f *core.File, state walker, tok html.Token) {
